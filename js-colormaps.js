@@ -212,6 +212,111 @@ function evaluate_cmap(x, name, reverse) {
   }
 }
 
+function evaluate_cmap_position(r, g, b, name, reverse = false) {
+  /**
+   * Find the position (0-1) where a given RGB color appears in a colormap
+   * @param {number} r - Red component (0-255)
+   * @param {number} g - Green component (0-255)
+   * @param {number} b - Blue component (0-255)
+   * @param {string} name - The name of the colormap (e.g., 'viridis', 'plasma')
+   * @param {boolean} reverse - Whether the colormap is reversed
+   * @return {number} - A value between 0 and 1 representing where the color appears in the colormap
+   */
+  
+  // Ensure that `name` is a valid colormap
+  if (!(name in data)) {
+    console.error('Colormap ' + name + ' does not exist!');
+    return 0.5; // Return middle value as fallback
+  }
+  
+  // Get colormap data
+  const colors = data[name]['colors'];
+  const interpolate = data[name]['interpolate'];
+  const targetColor = [r/255, g/255, b/255]; // Normalize to 0-1 range to match data format
+  
+  
+  // Find closest color and its position
+  let closestDistance = Infinity;
+  let closestIndex = 0;
+  
+  // Find closest colors in the colormap
+  for (let i = 0; i < colors.length; i++) {
+    const color = colors[i];
+    // Calculate distance in color space
+    const distance = Math.sqrt(
+      Math.pow(targetColor[0] - color[0], 2) +
+      Math.pow(targetColor[1] - color[1], 2) +
+      Math.pow(targetColor[2] - color[2], 2)
+    );
+    
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = i;
+    }
+  }
+  
+  // Calculate normalized position (0-1)
+  let position = closestIndex / (colors.length - 1);
+  
+  // For better precision on interpolated colormaps
+  if (interpolate && closestIndex > 0 && closestIndex < colors.length - 1) {
+    // Check if we should interpolate with previous or next color
+    const prevColor = colors[closestIndex - 1];
+    const currentColor = colors[closestIndex];
+    const nextColor = colors[closestIndex + 1];
+    
+    const distToPrev = Math.sqrt(
+      Math.pow(targetColor[0] - prevColor[0], 2) +
+      Math.pow(targetColor[1] - prevColor[1], 2) +
+      Math.pow(targetColor[2] - prevColor[2], 2)
+    );
+    
+    const distToNext = Math.sqrt(
+      Math.pow(targetColor[0] - nextColor[0], 2) +
+      Math.pow(targetColor[1] - nextColor[1], 2) +
+      Math.pow(targetColor[2] - nextColor[2], 2)
+    );
+    
+    // Interpolate position based on distances
+    if (distToPrev < distToNext) {
+      // Color is between previous and current
+      const segment = 1 / (colors.length - 1); // Size of each segment in 0-1 space
+      const segmentStart = (closestIndex - 1) / (colors.length - 1);
+      
+      // Calculate position within segment
+      const distBetweenColors = Math.sqrt(
+        Math.pow(prevColor[0] - currentColor[0], 2) +
+        Math.pow(prevColor[1] - currentColor[1], 2) +
+        Math.pow(prevColor[2] - currentColor[2], 2)
+      );
+      
+      const ratio = distToPrev / distBetweenColors;
+      position = segmentStart + (ratio * segment);
+    } else {
+      // Color is between current and next
+      const segment = 1 / (colors.length - 1); // Size of each segment in 0-1 space
+      const segmentStart = closestIndex / (colors.length - 1);
+      
+      // Calculate position within segment
+      const distBetweenColors = Math.sqrt(
+        Math.pow(currentColor[0] - nextColor[0], 2) +
+        Math.pow(currentColor[1] - nextColor[1], 2) +
+        Math.pow(currentColor[2] - nextColor[2], 2)
+      );
+      
+      const ratio = distToNext / distBetweenColors;
+      position = segmentStart + ((1 - ratio) * segment);
+    }
+  }
+  
+  // Handle reverse colormaps
+  if (reverse) {
+    position = 1 - position;
+  }
+  
+  return position;
+}
+
 function interpolated(x, colors) {
   let lo = Math.floor(x * (colors.length - 1));
   let hi = Math.ceil(x * (colors.length - 1));
